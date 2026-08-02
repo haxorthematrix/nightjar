@@ -391,6 +391,12 @@ async function openSignal(id) {
     <label class="chk" style="display:flex;gap:8px;align-items:center;margin:8px 0">
       <input type="checkbox" id="d-base" ${s.is_baseline?"checked":""}/> Mark as baseline (my own device)</label>
     <button class="btn primary" id="d-save">Save</button>
+    <div class="field"><label>Reassign to vehicle</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="s-vehid" type="number" min="1" placeholder="vehicle id" style="width:120px"/>
+        <button class="btn sm" id="s-move">Move</button>
+        ${s.vehicle_id ? `<button class="btn sm danger" id="s-detach">Detach from #${s.vehicle_id}</button>` : `<span class="sec-note">currently unlinked</span>`}
+      </div></div>
     <h3 style="margin-top:22px">Correlated over time <span class="sec-note" style="text-transform:none;letter-spacing:0"> — units seen together</span></h3>
     ${assoc.length ? `<div style="overflow:auto"><table>
       <thead><tr><th></th><th>Unit</th><th>Kind</th><th>Co-occur</th><th>RSSI corr</th></tr></thead>
@@ -415,6 +421,18 @@ async function openSignal(id) {
     closeDrawer(); loadSignals();
   };
   const vl = $("[data-veh]"); if (vl) vl.onclick = () => { closeDrawer(); openVehicle(+vl.dataset.veh); };
+  const reload = () => { if (App.view === "vehicles") loadVehicles(); if (App.view === "signals") loadSignals(); };
+  $("#s-move").onclick = async () => {
+    const vid = parseInt($("#s-vehid").value, 10);
+    if (!vid) return alert("Enter a target vehicle id.");
+    try { await api(`/api/signals/${id}/reassign`, { method: "POST", body: JSON.stringify({ vehicle_id: vid }) }); }
+    catch (e) { return alert("Move failed: " + e.message); }
+    closeDrawer(); reload();
+  };
+  const sd = $("#s-detach"); if (sd) sd.onclick = async () => {
+    await api(`/api/signals/${id}/reassign`, { method: "POST", body: JSON.stringify({ vehicle_id: null }) });
+    closeDrawer(); reload();
+  };
 }
 
 function rssiChart(vals) {
@@ -474,11 +492,21 @@ async function openVehicle(id) {
     <button class="btn primary" id="v-save">Save</button>
     <button class="btn ghost" id="v-arch">Archive</button>
 
-    <h3 style="margin-top:22px">Member identifiers</h3>
+    <h3 style="margin-top:22px">Member identifiers
+      <span class="sec-note" style="text-transform:none;letter-spacing:0"> — tick to split/detach</span></h3>
     <div style="overflow:auto"><table><tbody>${v.signals.map(s=>`
-      <tr data-sig="${s.id}"><td><span class="cat-dot c-${CAT[s.category]||"unknown"}"></span></td>
-        <td class="mono">${esc(s.identifier)}</td><td><span class="kind-tag k-${s.kind}">${esc(s.kind)}</span></td>
-        <td>${s.count}×</td></tr>`).join("")}</tbody></table></div>
+      <tr>
+        <td><input type="checkbox" data-sel="${s.id}"></td>
+        <td data-sig="${s.id}" style="cursor:pointer"><span class="cat-dot c-${CAT[s.category]||"unknown"}"></span></td>
+        <td class="mono" data-sig="${s.id}" style="cursor:pointer">${esc(s.identifier)}</td>
+        <td><span class="kind-tag k-${s.kind}">${esc(s.kind)}</span></td>
+        <td>${s.count}×</td>
+        <td><button class="btn sm ghost" data-detach1="${s.id}">detach</button></td>
+      </tr>`).join("")}</tbody></table></div>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn sm" id="v-split">Split selected → new vehicle</button>
+      <button class="btn sm danger" id="v-detach">Detach selected</button>
+    </div>
 
     ${v.detections?.length?`<h3 style="margin-top:22px">Detections</h3>
       <div class="grid gallery">${v.detections.map(d=>shotCard(d)).join("")}</div>`:""}
@@ -499,6 +527,26 @@ async function openVehicle(id) {
     closeDrawer(); loadVehicles();
   };
   $$("[data-sig]", $("#drawer")).forEach(tr => tr.onclick = () => { closeDrawer(); openSignal(+tr.dataset.sig); });
+
+  const selected = () => $$("[data-sel]", $("#drawer")).filter(c => c.checked).map(c => +c.dataset.sel);
+  $("#v-split").onclick = async () => {
+    const ids = selected();
+    if (!ids.length) return alert("Tick the members to split into a new vehicle.");
+    if (ids.length === v.signals.length) return alert("Leave at least one member behind, or use Detach.");
+    await api(`/api/vehicles/${id}/split`, { method: "POST", body: JSON.stringify({ signal_ids: ids }) });
+    closeDrawer(); loadVehicles();
+  };
+  $("#v-detach").onclick = async () => {
+    const ids = selected();
+    if (!ids.length) return alert("Tick the members to detach.");
+    await api(`/api/vehicles/${id}/detach`, { method: "POST", body: JSON.stringify({ signal_ids: ids }) });
+    closeDrawer(); loadVehicles();
+  };
+  $$("[data-detach1]", $("#drawer")).forEach(b => b.onclick = async (e) => {
+    e.stopPropagation();
+    await api(`/api/vehicles/${id}/detach`, { method: "POST", body: JSON.stringify({ signal_ids: [+b.dataset.detach1] }) });
+    closeDrawer(); loadVehicles();
+  });
 }
 
 /* ============================ review (suggestions) ============================ */

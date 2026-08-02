@@ -4,9 +4,10 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import or_, select
 
 from ..database import session_scope
-from ..models import Association, Signal, Sighting
-from ..schemas import SignalPatch
+from ..models import Association, Signal, Sighting, Vehicle
+from ..schemas import SignalPatch, SignalReassign
 from ..serialize import association_dict, signal_dict
+from ..vehicle_ops import block_between, recompute_or_delete
 
 router = APIRouter(prefix="/api/signals", tags=["signals"])
 
@@ -62,6 +63,29 @@ def patch_signal(signal_id: int, body: SignalPatch):
             s.notes = body.notes
         if body.category is not None:
             s.category = body.category
+        db.flush()
+        return signal_dict(s)
+
+
+@router.post("/{signal_id}/reassign")
+def reassign_signal(signal_id: int, body: SignalReassign):
+    """Move a signal to another vehicle (vehicle_id), or detach it (vehicle_id null)."""
+    with session_scope() as db:
+        s = db.get(Signal, signal_id)
+        if not s:
+            raise HTTPException(404, "not found")
+        if body.vehicle_id is not None and db.get(Vehicle, body.vehicle_id) is None:
+            raise HTTPException(400, "target vehicle not found")
+        old = s.vehicle_id
+        s.vehicle_id = body.vehicle_id
+        db.flush()
+        if body.block and old and old != body.vehicle_id:
+            members = {x.id for x in db.scalars(
+                select(Signal).where(Signal.vehicle_id == old)).all()}
+            block_between(db, {signal_id}, members)
+        recompute_or_delete(db, old)
+        if body.vehicle_id is not None:
+            recompute_or_delete(db, body.vehicle_id)
         db.flush()
         return signal_dict(s)
 
