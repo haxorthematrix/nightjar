@@ -57,6 +57,11 @@ DEFAULTS: dict[str, Any] = {
         "min_rssi_corr": 0.4,          # Pearson r threshold to allow a suggestion
         "min_rssi_samples": 6,         # paired samples before the gate is trusted
         "pair_window": 6,              # seconds; max gap for two readings to count as contemporaneous
+        # Non-anchor (phone/wearable) attach requires proof of co-movement, not just
+        # co-occurrence: correlated AND with real RSSI swing on both units. Rejects
+        # stationary neighbour devices sitting near a parked vehicle.
+        "attach_require_comovement": True,
+        "min_rssi_std": 3.0,           # dB; min RSSI std-dev for an attaching device to count as "moving"
     },
     "baseline": {"allowlist": [], "warmup_minutes": 0},
     "retention": {"sighting_days": 30, "detection_days": 30},

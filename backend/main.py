@@ -45,6 +45,8 @@ async def lifespan(app: FastAPI):
         min_rssi_corr=corr_cfg.get("min_rssi_corr", 0.5),
         min_rssi_samples=corr_cfg.get("min_rssi_samples", 6),
         pair_window=corr_cfg.get("pair_window", 6),
+        min_rssi_std=corr_cfg.get("min_rssi_std", 3.0),
+        attach_require_comovement=corr_cfg.get("attach_require_comovement", True),
     )
     notifier = NotificationEngine(bus, allowlist=settings["baseline"].get("allowlist", []))
     ingestor = Ingestor(bus, correlation, notifier)

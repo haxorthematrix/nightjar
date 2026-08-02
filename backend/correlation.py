@@ -40,7 +40,8 @@ class CorrelationEngine:
                  anchor_categories: list[str] | None = None,
                  durability: dict[str, float] | None = None,
                  min_rssi_corr: float = 0.5, min_rssi_samples: int = 6,
-                 pair_window: int = 6):
+                 pair_window: int = 6, min_rssi_std: float = 3.0,
+                 attach_require_comovement: bool = True):
         self.scene_window = scene_window
         self.min_encounters = min_encounters
         self.anchors = set(anchor_categories or ["tpms", "entertainment"])
@@ -49,6 +50,8 @@ class CorrelationEngine:
         self.min_rssi_corr = min_rssi_corr
         self.min_rssi_samples = min_rssi_samples
         self.pair_window = pair_window
+        self.min_rssi_std = min_rssi_std
+        self.attach_require_comovement = attach_require_comovement
         # signal_id -> (last ts in scene, last rssi)
         self._scene: dict[int, tuple[datetime, float | None]] = {}
         self._color_i = 0
@@ -146,6 +149,16 @@ class CorrelationEngine:
             return None  # a unit's RSSI is flat -> profile uninformative
         return max(-1.0, min(1.0, num / math.sqrt(va * vb)))
 
+    def _std(self, assoc: Association) -> tuple[float, float]:
+        """Standard deviation (dB) of each unit's RSSI in the paired samples. A stationary
+        device sits near-flat (small std); a passing one swings as it approaches/departs."""
+        n = assoc.n_rssi
+        if n < 2:
+            return (0.0, 0.0)
+        va = max(0.0, assoc.s_aa / n - (assoc.s_a / n) ** 2)
+        vb = max(0.0, assoc.s_bb / n - (assoc.s_b / n) ** 2)
+        return (math.sqrt(va), math.sqrt(vb))
+
     # ---------------------------------------------------------- suggestions
     def _maybe_suggest(self, db, assoc: Association) -> list[dict[str, Any]]:
         if assoc.co_count < self.min_encounters:
@@ -171,11 +184,22 @@ class CorrelationEngine:
             return []
 
         # --- RSSI-profile gate --------------------------------------------
-        # If we have enough contemporaneous samples and the units' signal strength does NOT
-        # move together, they are co-present but not co-moving -> almost certainly different
-        # vehicles. Suppress. (Keep accumulating; if agreement later rises, we'll suggest.)
         corr = assoc.rssi_corr if assoc.n_rssi >= self.min_rssi_samples else None
-        if corr is not None and corr < self.min_rssi_corr:
+        involves_weak = not (anchor_a and anchor_b)
+
+        if kind == "attach" and involves_weak and self.attach_require_comovement:
+            # A non-anchor device (phone/wearable/unknown) may only ATTACH to a vehicle if it
+            # demonstrably CO-MOVES with it: enough contemporaneous samples, positive RSSI
+            # correlation, AND real dynamic range on both units. A stationary neighbour device
+            # co-present with a parked vehicle has near-flat RSSI and is rejected here — this
+            # is what kills the stationary-BLE attach noise.
+            std_a, std_b = self._std(assoc)
+            if (corr is None or corr < self.min_rssi_corr
+                    or std_a < self.min_rssi_std or std_b < self.min_rssi_std):
+                return []
+        elif corr is not None and corr < self.min_rssi_corr:
+            # anchor pairs (e.g. TPMS wheels): co-occurrence is enough; only block on
+            # actively-disagreeing RSSI profiles.
             return []
 
         pair_dur = min(self._dur(sa.category), self._dur(sb.category))

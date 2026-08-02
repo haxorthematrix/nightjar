@@ -563,9 +563,16 @@ async function viewReview() {
       <span class="sub">the engine proposes; you confirm. Nothing merges without your approval.</span>
       <div class="spacer"></div>
       <select id="rstatus"><option value="pending">pending</option><option value="accepted">accepted</option><option value="rejected">rejected</option></select>
+      <button class="btn sm danger" id="dismiss-all">Dismiss all pending</button>
     </div>
     <div class="grid" id="rlist" style="grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px"></div>`;
   $("#rstatus").onchange = loadSuggestions;
+  $("#dismiss-all").onclick = async () => {
+    if (!confirm("Reject ALL pending suggestions? (clears the backlog)")) return;
+    const r = await api("/api/suggestions/dismiss-all", { method: "POST", body: "{}" });
+    alert(`Dismissed ${r.dismissed} suggestion(s).`);
+    loadSuggestions(); refreshStatus();
+  };
   loadSuggestions();
 }
 async function loadSuggestions() {

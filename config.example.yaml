@@ -88,6 +88,11 @@ correlation:
   min_rssi_corr: 0.4            # Pearson r threshold to allow/rank a suggestion (independent pairs ~0, anti <0)
   min_rssi_samples: 6           # paired RSSI samples before the gate is trusted
   pair_window: 6                # seconds; max gap for two readings to be "contemporaneous"
+  # A non-anchor device (phone/wearable) may only be proposed as a vehicle attachment if it
+  # demonstrably co-MOVES with the vehicle: correlated AND with real RSSI swing on both units.
+  # This rejects stationary neighbour BLE that merely sits near a parked vehicle.
+  attach_require_comovement: true
+  min_rssi_std: 3.0             # dB; min RSSI std-dev for an attaching device to count as "moving"
 
 # --- Baseline / notifications ---
 baseline:
