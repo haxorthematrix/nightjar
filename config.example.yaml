@@ -1,0 +1,86 @@
+# Nightjar configuration. Copy to config.yaml to override defaults.
+# All values here are the built-in defaults.
+
+# Global capture mode. When true, no hardware is touched and the Simulator feeds
+# realistic synthetic traffic through the full pipeline. Flip to false once the
+# RTL-SDR / SENA UD-100 / webcam are attached and drivers installed.
+mock_mode: true
+
+http:
+  host: 127.0.0.1
+  port: 8008
+
+database:
+  path: data/nightjar.db
+
+captures_dir: data/captures
+
+# Which services the UI exposes and whether they auto-start on boot.
+services:
+  simulator:   { enabled: true,  autostart: true  }   # ignored unless mock_mode
+  tpms:        { enabled: true,  autostart: false }
+  ble:         { enabled: true,  autostart: false }
+  bt_classic:  { enabled: false, autostart: false }
+  camera:      { enabled: true,  autostart: false }
+
+# --- TPMS / RTL-SDR (rtl_433) ---
+tpms:
+  rtl_433_bin: rtl_433
+  # Bands to listen on. rtl_433 tunes one at a time; Nightjar runs one process per
+  # frequency so both common TPMS bands are covered simultaneously.
+  frequencies: ["315M", "433.92M"]
+  # Empty = let rtl_433 decode all known TPMS protocols. Or list -R protocol numbers.
+  protocols: []
+  extra_args: []
+
+# --- Bluetooth / BLE (SENA UD-100 -> BlueZ hci adapter) ---
+ble:
+  adapter: hci0          # the UD-100 once plugged in
+  active_scan: true
+  # Seconds of silence before a device is considered "gone" from the scene.
+  presence_timeout: 90
+
+bt_classic:
+  adapter: hci0
+  inquiry_interval: 30   # seconds between discovery sweeps
+
+# --- Camera + ALPR ---
+camera:
+  device: 0              # /dev/video0
+  trigger: rf_event      # rf_event | motion | interval | manual
+  interval: 5            # seconds, when trigger=interval
+  alpr_backend: auto     # auto | fast_alpr | none
+  min_plate_confidence: 0.5
+
+# --- Correlation engine ---
+# Each TPMS sensor id and each BT/BLE address is one *unit*. The engine accumulates
+# persistent co-occurrence evidence between units over time and, when it crosses the
+# threshold, *suggests* a correlation for the operator to confirm — it never auto-merges.
+correlation:
+  scene_window: 20              # seconds; units seen within this window share a "scene"
+  min_encounters: 3             # co-occurrence episodes before a suggestion is raised
+  anchor_categories: [tpms, entertainment]   # durable ids that anchor a vehicle
+  durability:                   # evidence weight per category (rotating phones are weak)
+    tpms: 1.0
+    entertainment: 1.0
+    phone: 0.2
+    wearable: 0.2
+    unknown: 0.5
+  # RSSI-profile gate: units on the same vehicle rise/fall in signal strength together as it
+  # passes. Their RSSI time series must correlate before a suggestion is raised (co-presence
+  # alone is not enough — this is what rejects two unrelated units that merely pass together).
+  min_rssi_corr: 0.4            # Pearson r threshold to allow/rank a suggestion (independent pairs ~0, anti <0)
+  min_rssi_samples: 6           # paired RSSI samples before the gate is trusted
+  pair_window: 6                # seconds; max gap for two readings to be "contemporaneous"
+
+# --- Baseline / notifications ---
+baseline:
+  # Signals whose identifier matches these (substring, case-insensitive) are auto-baselined
+  # (e.g. your own car's TPMS ids or your phone MAC) and never raise "new over baseline".
+  allowlist: []
+  warmup_minutes: 0      # >0: auto-learn everything seen in the first N minutes as baseline
+
+retention:
+  # 0 = keep forever. Otherwise purge sightings/detections older than N days.
+  sighting_days: 30
+  detection_days: 30

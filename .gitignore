@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+data/nightjar.db
+data/nightjar.db-*
+data/captures/*
+!data/captures/.gitkeep
+config.yaml
+.DS_Store

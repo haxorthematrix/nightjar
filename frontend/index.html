@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nightjar — Privacy Exposure Console</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <!-- Legal / ethics gate -->
+  <div id="legal-gate" class="modal-backdrop hidden">
+    <div class="modal legal">
+      <h2>⚠︎ Passive RF Privacy Observatory</h2>
+      <p>Nightjar is a <strong>receive-only</strong> research &amp; awareness instrument. It
+         demonstrates how vehicles are re-identifiable by the RF identifiers they broadcast in
+         the clear (TPMS, BLE) and how those can be tied to a license plate.</p>
+      <ul>
+        <li>Operate only on RF already broadcast in the clear, in an environment you're
+            authorized to monitor.</li>
+        <li>Nightjar never transmits. It is for privacy assessment &amp; education, not
+            surveillance of individuals.</li>
+        <li>You are responsible for compliance with local law on RF interception, recording,
+            and imagery.</li>
+      </ul>
+      <label class="chk"><input type="checkbox" id="legal-ok" /> I understand and will operate
+        responsibly.</label>
+      <button class="btn primary" id="legal-continue" disabled>Enter console</button>
+    </div>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="glyph">◗</span>
+      <div>
+        <div class="title">NIGHTJAR</div>
+        <div class="tagline">vehicle privacy-exposure console</div>
+      </div>
+    </div>
+    <div class="topstats" id="topstats"></div>
+    <div class="topright">
+      <span id="mock-badge" class="badge hidden">MOCK</span>
+      <span class="conn" id="conn"><span class="dot"></span><span id="conn-label">connecting…</span></span>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav class="sidebar">
+      <a data-view="dashboard" class="navitem active"><span class="ic">▤</span>Dashboard</a>
+      <a data-view="signals" class="navitem"><span class="ic">≋</span>Signals</a>
+      <a data-view="vehicles" class="navitem"><span class="ic">▦</span>Vehicles</a>
+      <a data-view="review" class="navitem"><span class="ic">⚖</span>Review
+        <span class="pill" id="nav-review" data-zero="1">0</span></a>
+      <a data-view="detections" class="navitem"><span class="ic">▧</span>Detections</a>
+      <a data-view="notifications" class="navitem"><span class="ic">⚑</span>Alerts
+        <span class="pill" id="nav-alerts">0</span></a>
+      <a data-view="settings" class="navitem"><span class="ic">⚙</span>Settings</a>
+      <div class="sidebar-foot">
+        <div id="svc-mini"></div>
+      </div>
+    </nav>
+
+    <main id="main"></main>
+  </div>
+
+  <div id="toasts" class="toasts"></div>
+  <div id="drawer" class="drawer hidden"><div class="drawer-inner" id="drawer-inner"></div></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

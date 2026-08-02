@@ -1,0 +1,25 @@
+# --- Core (required for mock mode + web UI; all pure-python/wheels) ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+sqlalchemy==2.0.36
+pydantic==2.10.4
+pydantic-settings==2.7.0
+pyyaml==6.0.2
+
+# --- Live capture (needed once hardware is attached) ---
+# BLE scanning via the SENA UD-100 (BlueZ). Pure python.
+bleak==0.22.3
+
+# --- Camera + ALPR (install when the webcam arrives) ---
+# opencv-python-headless is lighter for a server node; swap for opencv-python if you
+# want local imshow debugging.
+# opencv-python-headless==4.10.0.84
+# numpy==2.1.3
+# fast-alpr==0.1.1            # optional ONNX ALPR backend (pulls onnxruntime)
+
+# Pillow: used only to render synthetic capture images in mock mode (real webcam frames
+# come from opencv). Safe to install; not needed once the camera is live.
+Pillow==12.3.0
+
+# Note: TPMS decoding uses the `rtl_433` *system binary* (apt install rtl-433),
+# not a python package.
