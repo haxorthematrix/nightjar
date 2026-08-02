@@ -109,3 +109,7 @@ Per-service milestones and the correlation roadmap are in `specification.md` §1
 
 Sensors → one **Ingestor** (persist → correlate → baseline/notify) → **event bus** →
 WebSocket → live UI. Nothing but the Ingestor writes to the database.
+
+## License
+
+[MIT](LICENSE) © 2026 Larry Pesce.
