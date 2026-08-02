@@ -30,10 +30,12 @@ DEFAULTS: dict[str, Any] = {
     "tpms": {
         "rtl_433_bin": "rtl_433",
         "frequencies": ["315M", "433.92M"],
+        "hop_interval": 30,     # seconds between band hops (single dongle can't do both at once)
         "protocols": [],
         "extra_args": [],
     },
-    "ble": {"adapter": "hci0", "active_scan": True, "presence_timeout": 90},
+    "ble": {"adapter": "hci0", "active_scan": True, "presence_timeout": 90,
+            "min_interval": 2.0},
     "bt_classic": {"adapter": "hci0", "inquiry_interval": 30},
     "camera": {
         "device": 0,

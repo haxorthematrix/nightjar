@@ -11,6 +11,7 @@ tracking. Nightjar is receive-only.
 from __future__ import annotations
 
 import asyncio
+import time
 
 from .base import Observation, Sensor
 
@@ -51,12 +52,28 @@ class BleSensor(Sensor):
         except TypeError:
             scanner = BleakScanner(**scanner_kwargs)
 
+        # Throttle: advertisements arrive many times/sec per device. Record at most one
+        # sighting per device per `min_interval` seconds — but always record when RSSI moves
+        # >6 dB, so a vehicle approaching/departing (the signal the correlator cares about)
+        # is never throttled away.
+        min_interval = float(cfg.get("min_interval", 2.0))
+        last_emit: dict[str, tuple[float, float]] = {}
+
         await scanner.start()
-        await self.log(f"BLE scanning on {adapter} ({'active' if active else 'passive'})")
+        await self.log(f"BLE scanning on {adapter} ({'active' if active else 'passive'}), "
+                       f"throttle {min_interval}s")
         try:
             while True:
                 device, adv = await queue.get()
-                await self.emit(self._to_observation(device, adv))
+                obs = self._to_observation(device, adv)
+                now = time.monotonic()
+                prev = last_emit.get(obs.identifier)
+                if prev and (now - prev[0]) < min_interval:
+                    r0, r1 = prev[1], (obs.rssi if obs.rssi is not None else -999.0)
+                    if abs(r1 - r0) < 6:
+                        continue  # stationary + recent -> skip
+                last_emit[obs.identifier] = (now, obs.rssi if obs.rssi is not None else -999.0)
+                await self.emit(obs)
         finally:
             await scanner.stop()
 

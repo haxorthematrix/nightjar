@@ -26,9 +26,12 @@ services:
 # --- TPMS / RTL-SDR (rtl_433) ---
 tpms:
   rtl_433_bin: rtl_433
-  # Bands to listen on. rtl_433 tunes one at a time; Nightjar runs one process per
-  # frequency so both common TPMS bands are covered simultaneously.
+  # Bands to listen on. A single RTL-SDR tunes one frequency at a time, so with more than
+  # one band Nightjar runs ONE rtl_433 process that hops between them every hop_interval
+  # seconds. US TPMS is mostly 315 MHz, EU mostly 433.92 MHz — list just one to avoid
+  # missing passes to hopping, or both to cover either.
   frequencies: ["315M", "433.92M"]
+  hop_interval: 30
   # Empty = let rtl_433 decode all known TPMS protocols. Or list -R protocol numbers.
   protocols: []
   extra_args: []
@@ -39,6 +42,10 @@ ble:
   active_scan: true
   # Seconds of silence before a device is considered "gone" from the scene.
   presence_timeout: 90
+  # Record at most one sighting per device per this many seconds (advertisements arrive
+  # many times/sec). A >6 dB RSSI change bypasses the throttle so approach/departure of a
+  # passing vehicle is always captured.
+  min_interval: 2.0
 
 bt_classic:
   adapter: hci0
