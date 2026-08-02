@@ -30,6 +30,14 @@ async def stop(name: str, request: Request):
         raise HTTPException(404, f"no such service '{name}'")
 
 
+@router.post("/{name}/restart")
+async def restart(name: str, request: Request):
+    try:
+        return await _manager(request).restart(name)
+    except KeyError:
+        raise HTTPException(404, f"no such service '{name}'")
+
+
 @router.post("/camera/snapshot")
 def snapshot(request: Request):
     ok = _manager(request).request_snapshot("camera")

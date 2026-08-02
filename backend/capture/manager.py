@@ -71,6 +71,13 @@ class CaptureManager:
         self._persist(sensor)
         return sensor.snapshot()
 
+    async def restart(self, name: str) -> dict[str, Any]:
+        sensor = self._require(name)
+        await sensor.stop()
+        await sensor.start()
+        self._persist(sensor)
+        return sensor.snapshot()
+
     async def stop_all(self) -> None:
         for sensor in self.sensors.values():
             await sensor.stop()

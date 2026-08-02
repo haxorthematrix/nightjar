@@ -26,12 +26,21 @@ services:
 # --- TPMS / RTL-SDR (rtl_433) ---
 tpms:
   rtl_433_bin: rtl_433
-  # Bands to listen on. A single RTL-SDR tunes one frequency at a time, so with more than
-  # one band Nightjar runs ONE rtl_433 process that hops between them every hop_interval
-  # seconds. US TPMS is mostly 315 MHz, EU mostly 433.92 MHz — list just one to avoid
-  # missing passes to hopping, or both to cover either.
+  # --- Single dongle ---
+  # A single RTL-SDR tunes one frequency at a time, so with more than one band Nightjar
+  # runs ONE rtl_433 process that hops between them every hop_interval seconds. US TPMS is
+  # mostly 315 MHz, EU mostly 433.92 MHz — list just one to avoid missing passes to
+  # hopping, or both to cover either.
   frequencies: ["315M", "433.92M"]
   hop_interval: 30
+  # --- Multiple dongles (recommended if you have them) ---
+  # Define one radio per dongle to cover several bands SIMULTANEOUSLY (no hopping). Each
+  # radio is its own rtl_433 process pinned to a device index (-d). If your dongles share
+  # the default serial 00000001, address them by index; set unique serials with rtl_eeprom
+  # for stable ordering. `radios` takes precedence over `frequencies` when present.
+  # radios:
+  #   - { device: 0, frequency: "315M",    gain: "49.6" }
+  #   - { device: 1, frequency: "433.92M", gain: "49.6" }
   # Empty = let rtl_433 decode all known TPMS protocols. Or list -R protocol numbers.
   protocols: []
   extra_args: []

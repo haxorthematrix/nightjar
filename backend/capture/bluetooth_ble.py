@@ -28,6 +28,12 @@ class BleSensor(Sensor):
     name = "ble"
     description = "BLE devices via SENA UD-100 (bleak/BlueZ)"
 
+    def describe(self) -> dict:
+        cfg = self.config.get("ble", {})
+        return {"adapter": cfg.get("adapter", "hci0"),
+                "active_scan": cfg.get("active_scan", True),
+                "throttle_s": cfg.get("min_interval", 2.0)}
+
     async def run(self) -> None:
         try:
             from bleak import BleakScanner

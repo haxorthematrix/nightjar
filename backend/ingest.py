@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from .capture.base import CameraCapture, Observation
 from .correlation import CorrelationEngine
@@ -42,42 +43,53 @@ class Ingestor:
 
     # -------------------------------------------------------------- signals
     async def observation(self, obs: Observation) -> None:
-        with session_scope() as db:
-            sig = db.scalar(
-                select(Signal).where(Signal.kind == obs.kind,
-                                     Signal.identifier == obs.identifier)
-            )
-            is_new = sig is None
-            if is_new:
-                sig = Signal(
-                    kind=obs.kind, identifier=obs.identifier,
-                    label=obs.label, category=obs.category,
-                    first_seen=obs.ts, last_seen=obs.ts, count=1,
-                    rssi_last=obs.rssi, rssi_best=obs.rssi,
-                    meta=dict(obs.data or {}),
-                )
-                db.add(sig)
-                db.flush()
-            else:
-                sig.last_seen = obs.ts
-                sig.count += 1
-                sig.rssi_last = obs.rssi
-                if obs.rssi is not None:
-                    sig.rssi_best = obs.rssi if sig.rssi_best is None else max(sig.rssi_best, obs.rssi)
-                if obs.category != "unknown" and sig.category == "unknown":
-                    sig.category = obs.category
-                if obs.label and not sig.label:
-                    sig.label = obs.label
-                if obs.data:
-                    merged = dict(sig.meta or {})
-                    merged.update(obs.data)
-                    sig.meta = merged
+        # Upsert with one retry: select-then-insert isn't atomic, so a concurrent first
+        # sighting of the same identifier can lose the race on INSERT (UNIQUE constraint).
+        # On IntegrityError we retry; the row now exists, so we take the update path.
+        signal_id = is_new = sig_payload = None
+        for attempt in range(2):
+            try:
+                with session_scope() as db:
+                    sig = db.scalar(
+                        select(Signal).where(Signal.kind == obs.kind,
+                                             Signal.identifier == obs.identifier)
+                    )
+                    is_new = sig is None
+                    if is_new:
+                        sig = Signal(
+                            kind=obs.kind, identifier=obs.identifier,
+                            label=obs.label, category=obs.category,
+                            first_seen=obs.ts, last_seen=obs.ts, count=1,
+                            rssi_last=obs.rssi, rssi_best=obs.rssi,
+                            meta=dict(obs.data or {}),
+                        )
+                        db.add(sig)
+                        db.flush()
+                    else:
+                        sig.last_seen = obs.ts
+                        sig.count += 1
+                        sig.rssi_last = obs.rssi
+                        if obs.rssi is not None:
+                            sig.rssi_best = obs.rssi if sig.rssi_best is None else max(sig.rssi_best, obs.rssi)
+                        if obs.category != "unknown" and sig.category == "unknown":
+                            sig.category = obs.category
+                        if obs.label and not sig.label:
+                            sig.label = obs.label
+                        if obs.data:
+                            merged = dict(sig.meta or {})
+                            merged.update(obs.data)
+                            sig.meta = merged
 
-            db.add(Sighting(signal_id=sig.id, ts=obs.ts, rssi=obs.rssi,
-                            source=obs.source, data=dict(obs.data or {})))
-            db.flush()
-            signal_id = sig.id
-            sig_payload = signal_dict(sig)
+                    db.add(Sighting(signal_id=sig.id, ts=obs.ts, rssi=obs.rssi,
+                                    source=obs.source, data=dict(obs.data or {})))
+                    db.flush()
+                    signal_id = sig.id
+                    sig_payload = signal_dict(sig)
+                break
+            except IntegrityError:
+                if attempt == 0:
+                    continue   # lost the insert race — retry as an update
+                raise
 
         await self.bus.publish("sighting.new", {
             "signal_id": signal_id, "kind": sig_payload["kind"],

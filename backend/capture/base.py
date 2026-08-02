@@ -128,7 +128,12 @@ class Sensor:
             "running": self.running,
             "last_error": self.last_error,
             "stats": self.stats,
+            "info": self.describe(),
         }
+
+    def describe(self) -> dict[str, Any]:
+        """Optional per-sensor config summary shown in the UI (radios, adapter, …)."""
+        return {}
 
     # ---- to be implemented ----------------------------------------------
     async def run(self) -> None:  # pragma: no cover - interface

@@ -114,7 +114,9 @@ function handleEvent(msg) {
       if (App.view === "review") scheduleViewRefresh();
       break;
     case "service.status":
-      mergeService(payload); renderServices(); renderSidebarServices();
+      mergeService(payload); renderSidebarServices();
+      if (App.view === "dashboard") renderServices();
+      if (App.view === "settings") renderSettingsServices();
       break;
     case "plate_bound":
     case "log":
@@ -275,18 +277,33 @@ function renderServices() {
           <span class="sec-note">· ${esc(s.status)}${s.stats?.emitted ? " · " + s.stats.emitted + " emitted" : ""}</span></div>
         <div class="svc-desc">${esc(s.description || "")}${s.last_error ? " — <span style='color:var(--crit)'>" + esc(s.last_error) + "</span>" : ""}</div>
       </div>
-      ${s.running
-        ? `<button class="btn sm danger" data-stop="${esc(s.name)}">Stop</button>`
-        : `<button class="btn sm primary" data-start="${esc(s.name)}">Start</button>`}
+      <div style="display:flex;gap:6px">${svcButtons(s)}</div>
     </div>`).join("") || `<div class="empty">no services configured</div>`;
-
-  $$("[data-start]").forEach(b => b.onclick = () => svcAction(b.dataset.start, "start"));
-  $$("[data-stop]").forEach(b => b.onclick = () => svcAction(b.dataset.stop, "stop"));
+  wireSvcButtons(el);
 }
 async function svcAction(name, action) {
   try { await api(`/api/services/${name}/${action}`, { method: "POST" }); }
   catch (e) { alert(`Failed to ${action} ${name}: ${e.message}`); }
   refreshStatus();
+}
+function svcButtons(s) {
+  return s.running
+    ? `<button class="btn sm danger" data-svc="stop|${esc(s.name)}">Stop</button>
+       <button class="btn sm" data-svc="restart|${esc(s.name)}">Restart</button>`
+    : `<button class="btn sm primary" data-svc="start|${esc(s.name)}">Start</button>
+       <button class="btn sm" data-svc="restart|${esc(s.name)}">Restart</button>`;
+}
+function wireSvcButtons(root) {
+  $$("[data-svc]", root || document).forEach(b => {
+    const [a, n] = b.dataset.svc.split("|"); b.onclick = () => svcAction(n, a);
+  });
+}
+function svcInfo(s) {
+  const i = s.info || {};
+  if (i.radios) return i.radios.map(r =>
+    `dev ${r.device ?? "auto"}: ${(r.frequencies || []).join("/")}${r.gain ? " @" + r.gain : ""}`).join(" · ");
+  if (i.adapter) return `adapter ${esc(i.adapter)}${i.active_scan ? " · active" : ""}${i.throttle_s != null ? " · throttle " + i.throttle_s + "s" : ""}`;
+  return "";
 }
 
 function renderCatBars() {
@@ -589,6 +606,11 @@ async function viewSettings() {
   $("#main").innerHTML = `
     <div class="view-head"><h1>Settings</h1><span class="sub">baseline &amp; capture configuration</span></div>
     <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+      <div class="card pad" style="grid-column:1/-1">
+        <h3>Capture services &amp; radios <span class="spacer"></span>
+          <button class="btn sm" id="svc-refresh">Refresh</button></h3>
+        <div id="settings-services"></div>
+      </div>
       <div class="card pad">
         <h3>Baseline</h3>
         <p class="sec-note">Tag your own devices/environment so they never raise "new over baseline" alerts. Run capture for a warm-up period, then learn.</p>
@@ -613,6 +635,22 @@ async function viewSettings() {
     </div>`;
   $("#learn").onclick = async () => { await api("/api/baseline/learn", { method: "POST", body: "{}" }); refreshStatus(); viewSettings(); };
   $("#reset").onclick = async () => { if(confirm("Clear all baseline flags?")){ await api("/api/baseline/reset", { method: "POST" }); refreshStatus(); viewSettings(); } };
+  renderSettingsServices();
+  $("#svc-refresh").onclick = () => refreshStatus().then(renderSettingsServices);
+}
+function renderSettingsServices() {
+  const el = $("#settings-services"); if (!el || !App.status) return;
+  el.innerHTML = App.status.services.map(s => `
+    <div class="svc-row">
+      <span class="status-dot ${s.status}"></span>
+      <div style="flex:1">
+        <div class="svc-name">${esc(s.name)}
+          <span class="sec-note">· ${esc(s.status)}${s.stats?.emitted ? " · " + s.stats.emitted + " emitted" : ""}</span></div>
+        <div class="svc-desc">${esc(svcInfo(s)) || esc(s.description || "")}${s.last_error ? " — <span style='color:var(--crit)'>" + esc(s.last_error) + "</span>" : ""}</div>
+      </div>
+      <div style="display:flex;gap:6px">${svcButtons(s)}</div>
+    </div>`).join("") || `<div class="empty">no services configured</div>`;
+  wireSvcButtons(el);
 }
 
 /* ============================ drawer + toast ============================ */
