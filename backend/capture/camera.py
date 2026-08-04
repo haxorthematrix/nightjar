@@ -48,13 +48,39 @@ class CameraSensor(Sensor):
         alpr = get_alpr(cfg.get("alpr_backend", "auto"))
         await self.log(f"ALPR backend: {alpr.backend}")
 
-        cap = cv2.VideoCapture(device)
+        # Blocking OpenCV calls run in a thread so they never freeze the server's event loop
+        # (a non-streaming device can block cap.read() for many seconds per call).
+        cap = await asyncio.to_thread(cv2.VideoCapture, device, cv2.CAP_V4L2)
+        if not cap.isOpened():
+            cap = await asyncio.to_thread(cv2.VideoCapture, device)  # fallback: any backend
         if not cap.isOpened():
             raise RuntimeError(f"Cannot open camera device {device}")
+        try:
+            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 2500)   # fail fast when not streaming
+        except Exception:  # noqa: BLE001
+            pass
+
+        # Probe: opening succeeds even when no video is actually streaming into the device
+        # (e.g. a VM virtual camera with no host passthrough). Confirm frames flow so the
+        # operator gets a clear signal instead of silent no-ops. Time-box the read — a
+        # non-streaming V4L2 device blocks ~10s per read regardless of READ_TIMEOUT_MSEC.
+        streaming = False
+        try:
+            ok, _f = await asyncio.wait_for(asyncio.to_thread(cap.read), timeout=4.0)
+            streaming = bool(ok and _f is not None)
+        except asyncio.TimeoutError:
+            streaming = False
+        self.stats["streaming"] = streaming
+        if streaming:
+            await self.log(f"Camera online (trigger={trigger}) — frames OK")
+        else:
+            await self.log("Camera device opened but is returning NO frames — is the webcam "
+                           "actually streaming? In a VM, attach/enable the camera passthrough "
+                           "(e.g. VMware: VM > Removable Devices > connect the camera).",
+                           level="warn")
 
         prev_scene: set[int] = set()
         prev_gray = None
-        await self.log(f"Camera online (trigger={trigger})")
         try:
             while True:
                 fire = False
@@ -78,8 +104,15 @@ class CameraSensor(Sensor):
                     self._snapshot_flag.clear()
                     fire = True
 
-                ok, frame = cap.read()
-                if not ok:
+                # only grab a frame when we intend to capture (or for motion detection)
+                if not fire and trigger != "motion":
+                    continue
+
+                ok, frame = await asyncio.to_thread(cap.read)
+                if not ok or frame is None:
+                    if fire:
+                        await self.log("Capture requested but the camera returned no frame "
+                                       "(device opened, but not streaming).", level="warn")
                     continue
 
                 if trigger == "motion":
@@ -95,9 +128,9 @@ class CameraSensor(Sensor):
 
                 ts = datetime.now(timezone.utc)
                 fname = captures_dir / f"cap_{ts.strftime('%Y%m%d_%H%M%S_%f')}.jpg"
-                cv2.imwrite(str(fname), frame)
+                await asyncio.to_thread(cv2.imwrite, str(fname), frame)
 
-                result = alpr.read(frame)
+                result = await asyncio.to_thread(alpr.read, frame)
                 plate = region = None
                 conf = None
                 bbox = {}
@@ -111,4 +144,4 @@ class CameraSensor(Sensor):
                     meta={"trigger": trigger},
                 ))
         finally:
-            cap.release()
+            await asyncio.to_thread(cap.release)
