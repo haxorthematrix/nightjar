@@ -15,7 +15,7 @@ import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
 
-from ..settings import get_settings
+from ..settings import ROOT, get_settings
 from .alpr import get_alpr
 from .base import CameraCapture, Sensor
 
@@ -139,7 +139,7 @@ class CameraSensor(Sensor):
                     bbox = result.bbox or {}
 
                 await self.emit_capture(CameraCapture(
-                    image_path=str(fname.relative_to(get_settings().captures_dir.parent)),
+                    image_path=str(fname.relative_to(ROOT)),  # router serves ROOT/image_path
                     plate_text=plate, plate_confidence=conf, region=region, bbox=bbox,
                     meta={"trigger": trigger},
                 ))
