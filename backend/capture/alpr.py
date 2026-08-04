@@ -29,26 +29,37 @@ class NullALPR:
 class FastALPR:
     backend = "fast_alpr"
 
-    def __init__(self):
+    def __init__(self, **kwargs):
         from fast_alpr import ALPR  # type: ignore
 
-        self._alpr = ALPR(detector_model="yolo-v9-t-384-license-plate-end2end",
-                          ocr_model="global-plates-mobile-vit-v2-model")
+        # Use the package defaults (detector + OCR models) so we track the installed version
+        # rather than pinning model names that change between releases. Overridable via kwargs.
+        self._alpr = ALPR(**kwargs)
+
+    @staticmethod
+    def _conf(value) -> float:
+        # OcrResult.confidence may be a single float or one value per character
+        if isinstance(value, (list, tuple)):
+            return float(sum(value) / len(value)) if value else 0.0
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return 0.0
 
     def read(self, frame):  # noqa: ANN001
-        results = self._alpr.predict(frame)
         best = None
-        for r in results:
+        for r in self._alpr.predict(frame):
             ocr = getattr(r, "ocr", None)
-            if not ocr or not ocr.text:
+            if not ocr or not getattr(ocr, "text", None):
                 continue
-            conf = float(getattr(ocr, "confidence", 0.0))
+            conf = self._conf(ocr.confidence)
             if best is None or conf > best.confidence:
-                box = getattr(r, "detection", None)
                 bbox = None
-                if box is not None and getattr(box, "bounding_box", None) is not None:
-                    b = box.bounding_box
-                    bbox = {"x1": b.x1, "y1": b.y1, "x2": b.x2, "y2": b.y2}
+                det = getattr(r, "detection", None)
+                bb = getattr(det, "bounding_box", None) if det else None
+                if bb is not None:
+                    bbox = {"x1": int(bb.x1), "y1": int(bb.y1),
+                            "x2": int(bb.x2), "y2": int(bb.y2)}
                 best = PlateResult(text=ocr.text.strip().upper(), confidence=conf, bbox=bbox)
         return best
 

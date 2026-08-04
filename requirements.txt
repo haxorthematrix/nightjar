@@ -10,15 +10,18 @@ pyyaml==6.0.2
 # BLE scanning via the SENA UD-100 (BlueZ). Pure python.
 bleak==0.22.3
 
-# --- Camera + ALPR (install when the webcam arrives) ---
+# --- Camera + ALPR (needed once a webcam is attached) ---
 # opencv-python-headless is lighter for a server node; swap for opencv-python if you
 # want local imshow debugging.
-# opencv-python-headless==4.10.0.84
-# numpy==2.1.3
-# fast-alpr==0.1.1            # optional ONNX ALPR backend (pulls onnxruntime)
+opencv-python-headless
+numpy
+# ALPR: YOLO plate detector + CCT OCR. onnxruntime is a runtime dep that fast-alpr does
+# not always pull in automatically — install it explicitly.
+fast-alpr
+onnxruntime
 
-# Pillow: used only to render synthetic capture images in mock mode (real webcam frames
-# come from opencv). Safe to install; not needed once the camera is live.
+# Pillow: renders synthetic capture images in mock mode (real webcam frames come from
+# opencv). Safe to install; harmless once the camera is live.
 Pillow==12.3.0
 
 # Note: TPMS decoding uses the `rtl_433` *system binary* (apt install rtl-433),

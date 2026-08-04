@@ -60,6 +60,25 @@ class CameraSensor(Sensor):
         except Exception:  # noqa: BLE001
             pass
 
+        # Request capture resolution. V4L2 snaps to the nearest the device actually offers,
+        # so we log what we truly get (an under-spec'd device / VM virtual camera will cap it).
+        want_w, want_h = int(cfg.get("width", 1920)), int(cfg.get("height", 1080))
+        fourcc = cfg.get("fourcc")
+        try:
+            if fourcc:
+                cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*str(fourcc)))
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, want_w)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, want_h)
+        except Exception:  # noqa: BLE001
+            pass
+        got_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        got_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        self.stats["resolution"] = f"{got_w}x{got_h}"
+        note = "" if (got_w, got_h) == (want_w, want_h) else f" (requested {want_w}x{want_h})"
+        await self.log(f"Camera resolution: {got_w}x{got_h}{note}"
+                       + ("" if got_h >= 720 else " — low for ALPR; see USB passthrough note"),
+                       level="info" if got_h >= 720 else "warn")
+
         # Probe: opening succeeds even when no video is actually streaming into the device
         # (e.g. a VM virtual camera with no host passthrough). Confirm frames flow so the
         # operator gets a clear signal instead of silent no-ops. Time-box the read — a

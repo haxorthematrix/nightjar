@@ -41,6 +41,9 @@ DEFAULTS: dict[str, Any] = {
         "device": 0,
         "trigger": "rf_event",
         "interval": 5,
+        "width": 1920,          # requested; V4L2 snaps to the nearest the device supports
+        "height": 1080,
+        "fourcc": None,         # e.g. "MJPG" to hit high res/fps on many USB webcams
         "alpr_backend": "auto",
         "min_plate_confidence": 0.5,
     },

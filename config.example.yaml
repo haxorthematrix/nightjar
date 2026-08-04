@@ -62,10 +62,18 @@ bt_classic:
 
 # --- Camera + ALPR ---
 camera:
-  device: 0              # /dev/video0
+  # device: an integer index (0) OR a path. Prefer a stable /dev/v4l/by-id/...-index0 path
+  # so it survives /dev/videoN renumbering across re-plug.
+  device: 0
   trigger: rf_event      # rf_event | motion | interval | manual
   interval: 5            # seconds, when trigger=interval
-  alpr_backend: auto     # auto | fast_alpr | none
+  # Requested capture resolution (V4L2 snaps to nearest supported; the service logs what it
+  # actually gets). Higher = better ALPR. In a VM, the "virtual camera" often caps low —
+  # use USB device passthrough of the real webcam for 1080p.
+  width: 1920
+  height: 1080
+  fourcc: null           # e.g. "MJPG" to reach high res/fps on many USB webcams
+  alpr_backend: auto     # auto | fast_alpr | none  (auto uses fast_alpr if installed)
   min_plate_confidence: 0.5
 
 # --- Correlation engine ---
