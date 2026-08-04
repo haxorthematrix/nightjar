@@ -95,6 +95,13 @@ class CaptureManager:
             return True
         return False
 
+    def request_autoadjust(self, name: str = "camera") -> bool:
+        sensor = self.sensors.get(name)
+        if isinstance(sensor, CameraSensor) and sensor.running:
+            sensor.request_autoadjust()
+            return True
+        return False
+
     # ------------------------------------------------------------- helpers
     def _require(self, name: str) -> Sensor:
         if name not in self.sensors:

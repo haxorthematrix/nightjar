@@ -663,6 +663,7 @@ async function viewSettings() {
     <div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;align-items:start">
       <div class="card pad" style="grid-column:1/-1">
         <h3>Capture services &amp; radios <span class="spacer"></span>
+          <button class="btn sm" id="cam-adjust" title="Re-optimize exposure/white balance — use after re-aiming or shading the camera">📷 Auto-adjust camera</button>
           <button class="btn sm" id="svc-refresh">Refresh</button></h3>
         <div id="settings-services"></div>
       </div>
@@ -692,6 +693,14 @@ async function viewSettings() {
   $("#reset").onclick = async () => { if(confirm("Clear all baseline flags?")){ await api("/api/baseline/reset", { method: "POST" }); refreshStatus(); viewSettings(); } };
   renderSettingsServices();
   $("#svc-refresh").onclick = () => refreshStatus().then(renderSettingsServices);
+  $("#cam-adjust").onclick = async () => {
+    try {
+      await api("/api/services/camera/auto-adjust", { method: "POST" });
+      alert("Camera auto-adjust applied: auto-exposure + auto white balance, backlight off.");
+    } catch (e) {
+      alert("Auto-adjust failed (is the camera service running?): " + e.message);
+    }
+  };
 }
 function renderSettingsServices() {
   const el = $("#settings-services"); if (!el || !App.status) return;

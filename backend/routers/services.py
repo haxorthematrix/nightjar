@@ -44,3 +44,11 @@ def snapshot(request: Request):
     if not ok:
         raise HTTPException(400, "camera service not available")
     return {"queued": True}
+
+
+@router.post("/camera/auto-adjust")
+def auto_adjust(request: Request):
+    ok = _manager(request).request_autoadjust("camera")
+    if not ok:
+        raise HTTPException(400, "camera service not running")
+    return {"queued": True}

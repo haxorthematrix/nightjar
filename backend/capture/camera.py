@@ -12,10 +12,14 @@ Requires: `pip install opencv-python-headless numpy` and a webcam.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from pathlib import Path
 
+from sqlalchemy import select
+
+from ..database import session_scope
+from ..models import Signal
 from ..settings import ROOT, get_settings
+from ..timeutil import now as _now
 from .alpr import get_alpr
 from .base import CameraCapture, Sensor
 
@@ -27,9 +31,32 @@ class CameraSensor(Sensor):
     def __init__(self, ingestor, config):
         super().__init__(ingestor, config)
         self._snapshot_flag = asyncio.Event()
+        self._autoadjust_flag = asyncio.Event()
 
     def request_snapshot(self) -> None:
         self._snapshot_flag.set()
+
+    def request_autoadjust(self) -> None:
+        self._autoadjust_flag.set()
+
+    def _apply_auto_profile(self, cap) -> None:
+        """Re-optimize the camera: auto-exposure + auto white balance, backlight comp off,
+        neutral gain/brightness. Handy after physically re-aiming/shading the camera."""
+        import cv2  # type: ignore
+        cap.set(cv2.CAP_PROP_AUTO_EXPOSURE, 3)   # V4L2 UVC: 3=auto (aperture priority), 1=manual
+        cap.set(cv2.CAP_PROP_AUTO_WB, 1)
+        cap.set(cv2.CAP_PROP_BACKLIGHT, 0)       # backlight compensation off (better outdoors)
+        cap.set(cv2.CAP_PROP_GAIN, 0)
+        cap.set(cv2.CAP_PROP_BRIGHTNESS, 128)
+
+    def _has_nonbaseline(self, signal_ids) -> bool:
+        """True if any of the given signals is NOT baselined (a passing/unknown unit)."""
+        ids = list(signal_ids)
+        if not ids:
+            return False
+        with session_scope() as db:
+            return db.scalar(select(Signal.id).where(
+                Signal.id.in_(ids), Signal.is_baseline.is_(False)).limit(1)) is not None
 
     async def run(self) -> None:
         try:
@@ -102,6 +129,11 @@ class CameraSensor(Sensor):
         prev_gray = None
         try:
             while True:
+                if self._autoadjust_flag.is_set():
+                    self._autoadjust_flag.clear()
+                    await asyncio.to_thread(self._apply_auto_profile, cap)
+                    await self.log("Camera auto-adjusted: auto-exposure + auto white balance, "
+                                   "backlight compensation off")
                 fire = False
                 if trigger == "interval":
                     await asyncio.sleep(interval)
@@ -112,10 +144,12 @@ class CameraSensor(Sensor):
                     fire = True
                 elif trigger == "rf_event":
                     await asyncio.sleep(0.5)
-                    scene = set(self.ingestor.correlation.active_signals(
-                        datetime.now(timezone.utc)))
-                    fire = bool(scene - prev_scene)
-                    prev_scene = scene
+                    active = set(self.ingestor.correlation.active_signals(_now()))
+                    new = active - prev_scene
+                    prev_scene = active
+                    # fire only when a NON-baseline unit newly enters the scene (a passing /
+                    # unknown vehicle) — not our baselined surroundings re-appearing
+                    fire = bool(new) and self._has_nonbaseline(new)
                 else:  # motion
                     await asyncio.sleep(0.3)
 
@@ -145,7 +179,7 @@ class CameraSensor(Sensor):
                 if not fire:
                     continue
 
-                ts = datetime.now(timezone.utc)
+                ts = _now()
                 fname = captures_dir / f"cap_{ts.strftime('%Y%m%d_%H%M%S_%f')}.jpg"
                 await asyncio.to_thread(cv2.imwrite, str(fname), frame)
 
